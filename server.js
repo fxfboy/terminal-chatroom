@@ -138,7 +138,7 @@ function validateInput(data) {
     errors.push('用户名不能为空');
   } else if (data.username.length > SECURITY_CONFIG.maxUsernameLength) {
     errors.push(`用户名不能超过${SECURITY_CONFIG.maxUsernameLength}字符`);
-  } else if (!/^[\w\u4e00-\u9fa5\-_.\s😀-🙏]+$/.test(data.username)) {
+  } else if (!/^[\w\u4e00-\u9fa5\-_.\s]+$/.test(data.username)) {
     errors.push('用户名包含非法字符');
   }
   
