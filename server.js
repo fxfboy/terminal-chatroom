@@ -18,7 +18,7 @@ const SECURITY_CONFIG = {
   maxUsernameLength: 50,
   maxChannelLength: 50,
   maxPasswordLength: 100,
-  maxMessageLength: 4096, // 单条消息最大 4KB
+  maxMessageLength: 100000, // 单条消息最大 100KB
   
   // 频率限制
   maxMessagesPerMinute: 30, // 每分钟最多 30 条消息
