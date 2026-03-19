@@ -205,10 +205,6 @@
   .chatInputArea {
     padding: 12px;
   }
-  
-  .sendBtn {
-    display: none;
-  }
 }
 
 .onlineUsersTitle {

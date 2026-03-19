@@ -71,6 +71,7 @@ export default function Home() {
       }
       lockTimerRef.current = setTimeout(() => {
         setIsLocked(true);
+        setPassword(''); // 清空密码输入框
         addSystemMessage('长时间未操作，已自动锁屏');
       }, LOCK_TIMEOUT);
     };
