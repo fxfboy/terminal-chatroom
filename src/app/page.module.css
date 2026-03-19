@@ -246,7 +246,7 @@
 
 .username {
   display: inline-block;
-  max-width: 10ch;
+  max-width: 20ch;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -329,6 +329,17 @@
   display: flex;
   align-items: baseline;
   padding-left: 0;
+  gap: 8px;
+}
+
+.messageTime {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.messageUser {
+  color: var(--text-color);
+  font-weight: 500;
 }
 
 .messageSystem {

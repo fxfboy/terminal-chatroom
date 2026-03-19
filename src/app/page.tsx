@@ -485,8 +485,8 @@ export default function Home() {
                 {msg.type === 'user' ? (
                 <>
                   <div className={styles.messageHeader}>
-                    <span className={styles.messageTime}>[{msg.time}]</span>
                     <span className={styles.messageUser}><span className={styles.username} title={msg.username}>{msg.username}</span>:</span>
+                    <span className={styles.messageTime}>[{msg.time}]</span>
                   </div>
                   <span className={styles.messageContent}>{renderMessageContent(msg.text)}</span>
                 </>
