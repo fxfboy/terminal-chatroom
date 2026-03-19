@@ -20,6 +20,9 @@ interface Message {
 
 const STORAGE_KEY = 'terminal_chatroom_session';
 
+// 锁屏超时时间：5 分钟（毫秒）
+const LOCK_TIMEOUT = 5 * 60 * 1000;
+
 // HTML 转义，防止 XSS
 function escapeHtml(str: string): string {
   return str
@@ -34,6 +37,7 @@ export default function Home() {
   const [showModal, setShowModal] = useState(false);
   const [savedSession, setSavedSession] = useState<ChatUser | null>(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [isLocked, setIsLocked] = useState(false);
   const [username, setUsername] = useState('');
   const [channel, setChannel] = useState('');
   const [password, setPassword] = useState('');
@@ -46,16 +50,49 @@ export default function Home() {
   const [isSending, setIsSending] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const lockTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // 检查是否有保存的 session
   useEffect(() => {
     const encryptedSession = localStorage.getItem(STORAGE_KEY);
     if (encryptedSession) {
-      // 尝试用空密码解密看看能不能获取到信息
-      // 由于需要密码，这里先显示一个通用的恢复提示
       setShowModal(true);
     }
   }, []);
+
+  // 锁屏功能：检测用户活动，超时后自动锁屏
+  useEffect(() => {
+    if (!isLoggedIn || isLocked) return;
+
+    // 重置锁屏定时器
+    const resetLockTimer = () => {
+      if (lockTimerRef.current) {
+        clearTimeout(lockTimerRef.current);
+      }
+      lockTimerRef.current = setTimeout(() => {
+        setIsLocked(true);
+        addSystemMessage('长时间未操作，已自动锁屏');
+      }, LOCK_TIMEOUT);
+    };
+
+    // 初始启动定时器
+    resetLockTimer();
+
+    // 监听用户活动事件
+    const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'];
+    events.forEach(event => {
+      window.addEventListener(event, resetLockTimer);
+    });
+
+    return () => {
+      if (lockTimerRef.current) {
+        clearTimeout(lockTimerRef.current);
+      }
+      events.forEach(event => {
+        window.removeEventListener(event, resetLockTimer);
+      });
+    };
+  }, [isLoggedIn, isLocked]);
 
   // 自动滚动到底部
   useEffect(() => {
@@ -265,6 +302,33 @@ export default function Home() {
     setIsLoading(false);
   };
 
+  // 解锁屏幕
+  const handleUnlock = async () => {
+    setIsLoading(true);
+    try {
+      const { decryptFromStorage } = await import('@/utils/crypto');
+      const session = await decryptFromStorage(STORAGE_KEY, password);
+      if (session && session.password === password) {
+        setIsLocked(false);
+        setError('');
+        addSystemMessage('已解锁屏幕');
+      } else {
+        setError('密码不正确');
+      }
+    } catch {
+      setError('密码不正确');
+    }
+    setIsLoading(false);
+  };
+
+  // 锁屏界面键盘事件
+  const handleLockKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleUnlock();
+    }
+  };
+
   // 开始新的 session
   const handleNewSession = () => {
     setShowModal(false);
@@ -354,11 +418,16 @@ export default function Home() {
     // 清理状态
     localStorage.removeItem(STORAGE_KEY);
     setIsLoggedIn(false);
+    setIsLocked(false);
     setUsername('');
     setChannel('');
     setPassword('');
     setMessages([]);
     setWsStatus('disconnected');
+    // 清理锁屏定时器
+    if (lockTimerRef.current) {
+      clearTimeout(lockTimerRef.current);
+    }
   };
 
   // 如果未登录，显示登录表单
@@ -451,6 +520,41 @@ export default function Home() {
   }
 
   // 聊天室界面
+  // 如果已锁屏，显示锁屏界面
+  if (isLocked) {
+    return (
+      <main className={styles.container}>
+        <div className={styles.modalOverlay}>
+          <div className={styles.modal}>
+            <h2 className={styles.modalTitle}>🔒 屏幕已锁定</h2>
+            <p className={styles.hint}>长时间未操作，请输入频道密码解锁</p>
+            <div className={styles.formGroup}>
+              <label className={styles.formLabel}>频道密码</label>
+              <input
+                type="password"
+                className={styles.formInput}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                onKeyPress={handleLockKeyPress}
+                placeholder="输入密码解锁屏幕"
+                autoFocus
+              />
+            </div>
+            {error && <p className={styles.error}>{error}</p>}
+            <div className={styles.modalButtons}>
+              <button className={styles.btn} onClick={handleLogout} disabled={isLoading}>
+                退出登录
+              </button>
+              <button className={`${styles.btn} ${styles.btnPrimary}`} onClick={handleUnlock} disabled={isLoading}>
+                {isLoading ? '解锁中...' : '解锁'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className={styles.container}>
       <div className={styles.terminalHeader}>
