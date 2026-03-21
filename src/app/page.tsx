@@ -117,7 +117,7 @@ export default function Home() {
 
     const connect = () => {
       // 先关闭旧连接，防止重复连接导致消息重复
-      if (wsRef.current) {
+      if (wsRef.current && wsRef.current.readyState !== WebSocket.CLOSED) {
         wsRef.current.onclose = null;  // 防止触发重连逻辑
         wsRef.current.close();
         wsRef.current = null;
