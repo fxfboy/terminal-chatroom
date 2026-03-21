@@ -341,14 +341,6 @@ export default function Home() {
     setIsLoading(false);
   };
 
-  // 锁屏界面键盘事件
-  const handleLockKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      handleUnlock();
-    }
-  };
-
   // 开始新的 session
   const handleNewSession = () => {
     setShowModal(false);
@@ -468,6 +460,12 @@ export default function Home() {
                   className={styles.formInput}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleRestoreSession();
+                    }
+                  }}
                   placeholder="输入密码恢复会话"
                 />
               </div>
@@ -556,7 +554,12 @@ export default function Home() {
                 className={styles.formInput}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                onKeyPress={handleLockKeyPress}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleUnlock();
+                  }
+                }}
                 placeholder="输入密码解锁屏幕"
                 autoFocus
               />
