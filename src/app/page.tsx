@@ -116,6 +116,13 @@ export default function Home() {
     let ws: WebSocket | null = null;
 
     const connect = () => {
+      // 先关闭旧连接，防止重复连接导致消息重复
+      if (wsRef.current) {
+        wsRef.current.onclose = null;  // 防止触发重连逻辑
+        wsRef.current.close();
+        wsRef.current = null;
+      }
+
       // 使用 wss:// 协议 + 当前域名 + /ws 路径
       // 通过 Next.js 自定义服务器代理 WebSocket
       const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
