@@ -33,6 +33,13 @@ function escapeHtml(str: string): string {
     .replace(/'/g, '&#039;');
 }
 
+function formatTime12Hour(date: Date = new Date()): string {
+  let hours = date.getHours() % 12;
+  if (hours === 0) hours = 12;
+  const minutes = date.getMinutes().toString().padStart(2, '0');
+  return `${hours}:${minutes}`;
+}
+
 export default function Home() {
   const [showModal, setShowModal] = useState(false);
   const [savedSession, setSavedSession] = useState<ChatUser | null>(null);
@@ -194,7 +201,7 @@ export default function Home() {
         type: 'user',
         username: isSelf ? safeUsername + ' (你)' : safeUsername,
         text: decryptedText,
-        time: data.time || new Date().toLocaleTimeString()
+        time: data.time || formatTime12Hour()
       }]);
     } catch {
       // 如果解密失败，可能是其他频道的消息或格式问题
@@ -207,7 +214,7 @@ export default function Home() {
       id: Date.now().toString(),
       type: 'system',
       text,
-      time: new Date().toLocaleTimeString()
+      time: formatTime12Hour()
     }]);
   };
 
@@ -216,7 +223,7 @@ export default function Home() {
       id: Date.now().toString(),
       type: 'error',
       text,
-      time: new Date().toLocaleTimeString()
+      time: formatTime12Hour()
     }]);
   };
 
@@ -389,7 +396,7 @@ export default function Home() {
         text: encryptedText,
         username,
         channel,
-        time: new Date().toLocaleTimeString()
+        time: formatTime12Hour()
       }));
 
       // 不需要立即显示，服务器广播回来时会显示

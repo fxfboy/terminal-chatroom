@@ -302,6 +302,12 @@
   white-space: pre-wrap;
 }
 
+.message.self .messageHeader {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
 .message.self .messageTime {
   margin-right: 0;
   margin-top: 4px;
