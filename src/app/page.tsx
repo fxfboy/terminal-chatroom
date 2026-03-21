@@ -58,6 +58,7 @@ export default function Home() {
   const wsRef = useRef<WebSocket | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const lockTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const isLoggingOut = useRef(false);
 
   // 检查是否有保存的 session
   useEffect(() => {
@@ -175,6 +176,10 @@ export default function Home() {
 
       ws.onclose = () => {
         setWsStatus('disconnected');
+        if (isLoggingOut.current) {
+          isLoggingOut.current = false;
+          return;
+        }
         addSystemMessage('连接断开，正在重连...');
         // 5秒后自动重连
         reconnectTimer = setTimeout(connect, 5000);
@@ -418,6 +423,7 @@ export default function Home() {
 
   // 登出
   const handleLogout = () => {
+    isLoggingOut.current = true;
     // 发送离开消息给服务器
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ type: 'leave' }));
