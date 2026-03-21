@@ -328,7 +328,7 @@ export default function Home() {
     try {
       const { decryptFromStorage } = await import('@/utils/crypto');
       const session = await decryptFromStorage(STORAGE_KEY, password);
-      if (session && session.password === password) {
+      if (session) {
         setIsLocked(false);
         setError('');
         addSystemMessage('已解锁屏幕');
