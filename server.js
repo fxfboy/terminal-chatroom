@@ -21,9 +21,9 @@ const SECURITY_CONFIG = {
   maxMessageLength: 100000, // 单条消息最大 100KB
   
   // 频率限制
-  maxMessagesPerMinute: 30, // 每分钟最多 30 条消息
-  maxConnectionsPerMinute: 10, // 每分钟最多 10 次连接
-  maxJoinAttemptsPerMinute: 5, // 每分钟最多 5 次加入尝试
+  maxMessagesPerMinute: parseInt(process.env.RATE_LIMIT_MESSAGES || '30', 10),
+  maxConnectionsPerMinute: parseInt(process.env.RATE_LIMIT_CONNECTIONS || '10', 10),
+  maxJoinAttemptsPerMinute: parseInt(process.env.RATE_LIMIT_JOINS || '5', 10),
   
   // 封禁配置
   banDurationMs: 30 * 60 * 1000, // 封禁 30 分钟
