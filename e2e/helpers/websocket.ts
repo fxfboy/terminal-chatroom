@@ -1,3 +1,6 @@
+// WebSocket test client for server-side testing outside the browser.
+// Used for direct WebSocket protocol testing and multi-client scenarios
+// that don't require a full browser context.
 import WebSocket from 'ws';
 
 export interface WSMessage {

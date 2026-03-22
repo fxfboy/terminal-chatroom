@@ -1,3 +1,6 @@
+// Node.js re-implementation of production crypto.js (AES-256-GCM).
+// Used for server-side test helpers that need to encrypt/decrypt messages
+// outside the browser context (e.g., direct WebSocket testing).
 import { createCipheriv, createDecipheriv, randomBytes, pbkdf2Sync } from 'crypto';
 
 const ITERATIONS = 100000;
