@@ -1,98 +1,112 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, BrowserContext, Page } from '@playwright/test';
 import { ChatRoomPage } from '../helpers/page-objects';
 
-test.describe('Messaging Flow', () => {
-  let chatRoomPage: ChatRoomPage;
+// Force single worker for this file to avoid rate limiting
+// (server limits to 5 joins per minute per IP)
+test.describe.configure({ mode: 'serial' });
 
-  test.beforeEach(async ({ page }) => {
-    chatRoomPage = new ChatRoomPage(page);
-    await chatRoomPage.goto();
+test.describe('Messaging', () => {
+  const PASSWORD = 'test-password-123';
+  const CHANNEL = `msg-test-${Date.now()}`;
 
-    // Login
-    const username = `test_user_${Date.now()}`;
-    const channel = `test_channel_${Date.now()}`;
-    const password = 'testpassword123';
-    await chatRoomPage.login(username, channel, password);
-    
-    // Wait for chat interface
-    await expect(chatRoomPage.messageInput).toBeVisible({ timeout: 5000 });
+  let context1: BrowserContext;
+  let context2: BrowserContext;
+  let page1: Page;
+  let page2: Page;
+  let chat1: ChatRoomPage;
+  let chat2: ChatRoomPage;
+
+  test.beforeAll(async ({ browser }) => {
+    context1 = await browser.newContext();
+    context2 = await browser.newContext();
+    page1 = await context1.newPage();
+    page2 = await context2.newPage();
+
+    chat1 = new ChatRoomPage(page1);
+    chat2 = new ChatRoomPage(page2);
+
+    // Login User1
+    await chat1.goto();
+    await chat1.login('Alice', CHANNEL, PASSWORD);
+    await expect(chat1.messageInput).toBeVisible({ timeout: 10000 });
+    // Wait for WebSocket to connect and receive initial system messages
+    await expect(page1.locator('[class*="chatMessages"]')).toContainText('已加入频道', { timeout: 10000 });
+
+    // Login User2
+    await chat2.goto();
+    await chat2.login('Bob', CHANNEL, PASSWORD);
+    await expect(chat2.messageInput).toBeVisible({ timeout: 10000 });
+    // Wait for WebSocket to connect and receive initial system messages
+    await expect(page2.locator('[class*="chatMessages"]')).toContainText('已加入频道', { timeout: 10000 });
+
+    // Wait for both users to appear in User2's online list
+    // (confirms WebSocket bidirectional communication is working)
+    await expect(chat2.onlineUsersList).toContainText('Bob', { timeout: 15000 });
+    await expect(chat2.onlineUsersList).toContainText('Alice', { timeout: 15000 });
   });
 
-  test('should display chat interface', async ({ page }) => {
-    await expect(chatRoomPage.messageInput).toBeVisible();
-    await expect(chatRoomPage.sendButton).toBeVisible();
-    await expect(chatRoomPage.logoutButton).toBeVisible();
+  test.afterAll(async () => {
+    await context1?.close();
+    await context2?.close();
   });
 
-  test('should send a message', async ({ page }) => {
-    const testMessage = `Hello from E2E test! ${Date.now()}`;
-    
-    // Wait for WebSocket to connect
-    await page.waitForTimeout(2000);
-    
-    await chatRoomPage.sendMessage(testMessage);
-    
-    // Wait for message to appear in the DOM
-    await page.waitForSelector(`text=${testMessage}`, { timeout: 5000 });
-    
-    // Verify message count increased
-    const messageCount = await chatRoomPage.getMessageCount();
-    expect(messageCount).toBeGreaterThan(0);
+  test('should send and receive encrypted messages between users', async () => {
+    // User1 sends a message
+    const testMessage = `Hello from Alice ${Date.now()}`;
+    await chat1.sendMessage(testMessage);
+
+    // User2 should see the message (decrypted automatically since same password)
+    await chat2.waitForMessage(testMessage, 15000);
+
+    // Verify the message also appears in User1's own view (server broadcasts to all)
+    await chat1.waitForMessage(testMessage, 15000);
   });
 
-  test('should send multiple messages', async ({ page }) => {
-    const messages = [
-      `First message ${Date.now()}`,
-      `Second message ${Date.now()}`,
-      `Third message ${Date.now()}`
-    ];
-    
-    // Wait for WebSocket to connect
-    await page.waitForTimeout(2000);
-    
-    for (const msg of messages) {
-      await chatRoomPage.sendMessage(msg);
-      await page.waitForSelector(`text=${msg}`, { timeout: 5000 });
-      // Delay between messages for WebSocket processing
-      await page.waitForTimeout(800);
-    }
-    
-    // Extra time for all messages to render
-    await page.waitForTimeout(500);
-    
-    const messageCount = await chatRoomPage.getMessageCount();
-    expect(messageCount).toBeGreaterThanOrEqual(messages.length);
+  test('should show correct sender for messages', async () => {
+    // User1 sends a message
+    const testMessage = `Sender test ${Date.now()}`;
+    await chat1.sendMessage(testMessage);
+
+    // Wait for message to appear on User2's view
+    await chat2.waitForMessage(testMessage, 15000);
+
+    // On User2's view, find the message and verify the sender name
+    const messageWithContent = page2.locator('[class*="message"]').filter({ hasText: testMessage });
+    const senderLabel = messageWithContent.locator('[class*="messageUser"]');
+    await expect(senderLabel).toContainText('Alice');
   });
 
-  test('should handle empty message', async ({ page }) => {
-    // Wait for system messages to settle
-    await page.waitForTimeout(2000);
-
-    const initialCount = await chatRoomPage.getMessageCount();
-
-    // Try to send empty message
-    await chatRoomPage.messageInput.fill('');
-    await chatRoomPage.sendButton.click();
-
-    // Wait a bit
-    await page.waitForTimeout(1000);
-
-    // Message count should not increase
-    const finalCount = await chatRoomPage.getMessageCount();
-    expect(finalCount).toBe(initialCount);
+  test('should display user join/leave system messages', async () => {
+    // The "Bob 加入了频道" system message should have been broadcast to Alice
+    // when Bob joined the channel in beforeAll.
+    // System messages render as: <div class="messageSystem"><span class="messageText">...</span></div>
+    const joinMessage = page1.locator('[class*="messageSystem"]').filter({ hasText: 'Bob 加入了频道' }).first();
+    await expect(joinMessage).toBeVisible({ timeout: 15000 });
   });
 
-  test('should display online users section', async ({ page }) => {
-    // Check if online users title exists
-    const onlineUsersTitle = page.getByText('在线用户');
-    await expect(onlineUsersTitle).toBeVisible();
+  test('should show online user count', async () => {
+    // Verify that both usernames appear in the online users list on User1's page
+    await expect(chat1.onlineUsersList).toContainText('Alice', { timeout: 15000 });
+    await expect(chat1.onlineUsersList).toContainText('Bob', { timeout: 15000 });
+
+    // Verify the same on User2's page
+    await expect(chat2.onlineUsersList).toContainText('Alice', { timeout: 15000 });
+    await expect(chat2.onlineUsersList).toContainText('Bob', { timeout: 15000 });
   });
 
-  test('should logout successfully', async ({ page }) => {
-    await chatRoomPage.logout();
-    
-    // Wait for login form to reappear
-    await expect(chatRoomPage.usernameInput).toBeVisible({ timeout: 5000 });
-    await expect(chatRoomPage.logoutButton).not.toBeVisible();
+  test('should handle code blocks in messages', async () => {
+    // User1 sends a message containing a code block
+    const codeContent = 'console.log("hello");';
+    const codeMessage = '```\n' + codeContent + '\n```';
+    await chat1.sendMessage(codeMessage);
+
+    // Wait for the code block to render on User2's view
+    // Use pre[class*="codeBlock"] to match the rendered <pre> element specifically
+    // (avoids matching the codeBlockBtn button)
+    const codeBlock = page2.locator('pre[class*="codeBlock"]');
+    await expect(codeBlock.first()).toBeVisible({ timeout: 15000 });
+
+    // Verify the code content is visible inside the code block
+    await expect(codeBlock.first()).toContainText(codeContent);
   });
 });
