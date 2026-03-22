@@ -42,3 +42,10 @@ next-env.d.ts
 
 # database
 chat.db
+
+# playwright
+/playwright-report/
+/test-results/
+
+# worktrees
+.worktrees/
