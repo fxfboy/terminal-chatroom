@@ -77,9 +77,11 @@ export class ChatRoomPage {
   }
 
   async waitForMessage(content: string, timeout: number = 5000): Promise<void> {
-    await this.page.waitForSelector(`[class*="message"]:has-text("${content}")`, {
-      timeout,
-    });
+    await this.messageList
+      .locator('[class*="message"]')
+      .filter({ hasText: content })
+      .first()
+      .waitFor({ timeout });
   }
 
   async logout() {

@@ -27,7 +27,10 @@ export class TestWebSocket {
 
   waitForMessage(expectedType: string, trigger?: () => void, timeout: number = 5000): Promise<WSMessage> {
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error(`Timeout waiting for ${expectedType}`)), timeout);
+      const timer = setTimeout(() => {
+        this.messageHandlers = this.messageHandlers.filter((h) => h !== handler);
+        reject(new Error(`Timeout waiting for ${expectedType}`));
+      }, timeout);
       const handler = (data: WSMessage) => {
         if (data.type === expectedType) {
           clearTimeout(timer);
@@ -51,7 +54,10 @@ export class TestWebSocket {
   }
 
   close(): void {
-    this.send({ type: 'leave' });
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.send({ type: 'leave' });
+    }
     this.ws?.close();
+    this.messageHandlers = [];
   }
 }
