@@ -65,15 +65,18 @@ test.describe('Messaging Flow', () => {
   });
 
   test('should handle empty message', async ({ page }) => {
+    // Wait for system messages to settle
+    await page.waitForTimeout(2000);
+
     const initialCount = await chatRoomPage.getMessageCount();
-    
+
     // Try to send empty message
     await chatRoomPage.messageInput.fill('');
     await chatRoomPage.sendButton.click();
-    
+
     // Wait a bit
     await page.waitForTimeout(1000);
-    
+
     // Message count should not increase
     const finalCount = await chatRoomPage.getMessageCount();
     expect(finalCount).toBe(initialCount);
