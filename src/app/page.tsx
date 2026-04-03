@@ -33,6 +33,47 @@ function escapeHtml(str: string): string {
     .replace(/'/g, '&#039;');
 }
 
+/**
+ * 从文本和光标位置提取当前正在输入的 @query。
+ * 从光标向左扫描，若遇到 @ 则返回 @ 之后的内容，
+ * 若遇到空格 / 换行则返回 null（说明 @ 已经结束）。
+ */
+function getMentionQuery(text: string, cursorPos: number): string | null {
+  let i = cursorPos - 1;
+  while (i >= 0) {
+    const ch = text[i];
+    if (ch === '@') {
+      // @ 前面必须是字符串起始、空格或换行，防止误触发 email 地址
+      if (i === 0 || text[i - 1] === ' ' || text[i - 1] === '\n') {
+        return text.slice(i + 1, cursorPos);
+      }
+      return null;
+    }
+    if (ch === ' ' || ch === '\n') return null;
+    i--;
+  }
+  return null;
+}
+
+/**
+ * 将文本中 cursorPos 左侧的 @query 替换为 @username（带尾随空格）。
+ */
+function replaceMentionInText(
+  text: string,
+  cursorPos: number,
+  query: string,
+  username: string
+): { newText: string; newCursor: number } {
+  const atStart = cursorPos - query.length - 1; // @ 的位置
+  const before = text.slice(0, atStart);
+  const after = text.slice(cursorPos);
+  const insertion = `@${username} `;
+  return {
+    newText: before + insertion + after,
+    newCursor: before.length + insertion.length,
+  };
+}
+
 function formatTime12Hour(date: Date = new Date()): string {
   let hours = date.getHours() % 12;
   if (hours === 0) hours = 12;
@@ -56,6 +97,11 @@ export default function Home() {
   const [wsStatus, setWsStatus] = useState('connecting');
   const [isSending, setIsSending] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
+  // ===== @提及功能 state =====
+  const [mentionQuery, setMentionQuery] = useState('');
+  const [mentionDropdownVisible, setMentionDropdownVisible] = useState(false);
+  const [mentionActiveIndex, setMentionActiveIndex] = useState(0);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const lockTimerRef = useRef<NodeJS.Timeout | null>(null);
   const isLoggingOut = useRef(false);
@@ -239,6 +285,39 @@ export default function Home() {
     }]);
   };
 
+  // 将单行文本中的 @用户名 替换为高亮 span
+  const renderLineWithMentions = (line: string) => {
+    const mentionRegex = /@([\w\u4e00-\u9fa5\-_.]+)/g;
+    const result: React.ReactNode[] = [];
+    let lastIndex = 0;
+    let m: RegExpExecArray | null;
+
+    while ((m = mentionRegex.exec(line)) !== null) {
+      // 普通文本部分
+      if (m.index > lastIndex) {
+        result.push(line.slice(lastIndex, m.index));
+      }
+      const mentionedName = m[1];
+      const isSelf = mentionedName === username;
+      result.push(
+        <span
+          key={m.index}
+          className={isSelf ? styles.mentionSelf : styles.mentionHighlight}
+          title={isSelf ? '你被提及了' : `@${mentionedName}`}
+        >
+          @{mentionedName}
+        </span>
+      );
+      lastIndex = m.index + m[0].length;
+    }
+
+    if (lastIndex < line.length) {
+      result.push(line.slice(lastIndex));
+    }
+
+    return result.length > 0 ? result : line;
+  };
+
   // 渲染消息内容，支持代码块
   const renderMessageContent = (text: string) => {
     // 检测代码块
@@ -290,11 +369,11 @@ export default function Home() {
           </pre>
         );
       }
-      // 将纯文本中的换行符转换为 <br> 标签
+      // 将纯文本中的换行符转换为 <br>，并高亮 @提及
       const lines = (part as string).split('\n');
       return lines.map((line, i) => (
         <span key={`${index}-${i}`}>
-          {line}
+          {renderLineWithMentions(line)}
           {i < lines.length - 1 && <br />}
         </span>
       ));
@@ -386,8 +465,27 @@ export default function Home() {
     // 不需要立即显示，服务器广播回来时会显示
   };
 
+  // 处理输入框变化，检测 @提及
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const value = e.target.value;
+    setInputMessage(value);
+
+    const cursor = e.target.selectionStart ?? value.length;
+    const query = getMentionQuery(value, cursor);
+
+    if (query !== null) {
+      setMentionQuery(query);
+      setMentionActiveIndex(0);
+      setMentionDropdownVisible(true);
+    } else {
+      setMentionDropdownVisible(false);
+      setMentionQuery('');
+    }
+  };
+
   // 发送消息
   const handleSendMessage = async () => {
+    setMentionDropdownVisible(false);
     if (!inputMessage.trim() || !wsRef.current || isSending) return;
 
     setIsSending(true);
@@ -412,8 +510,59 @@ export default function Home() {
     }
   };
 
-  // 键盘事件
+  // 选中提及候选人，插入到输入框
+  const selectMention = (selectedUsername: string) => {
+    const textarea = textareaRef.current;
+    const cursor = textarea?.selectionStart ?? inputMessage.length;
+    const { newText, newCursor } = replaceMentionInText(
+      inputMessage,
+      cursor,
+      mentionQuery,
+      selectedUsername
+    );
+    setInputMessage(newText);
+    setMentionDropdownVisible(false);
+    setMentionQuery('');
+    // 恢复焦点并设置光标位置
+    setTimeout(() => {
+      if (textarea) {
+        textarea.focus();
+        textarea.setSelectionRange(newCursor, newCursor);
+      }
+    }, 0);
+  };
+
+  // 聊天输入框键盘事件（含 @提及下拉导航）
   const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (mentionDropdownVisible) {
+      const filtered = onlineUsers.filter(u =>
+        u.toLowerCase().startsWith(mentionQuery.toLowerCase())
+      );
+
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setMentionActiveIndex(i => Math.min(i + 1, filtered.length - 1));
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setMentionActiveIndex(i => Math.max(i - 1, 0));
+        return;
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        if (filtered[mentionActiveIndex]) {
+          selectMention(filtered[mentionActiveIndex]);
+        }
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setMentionDropdownVisible(false);
+        return;
+      }
+    }
+
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSendMessage();
@@ -627,19 +776,44 @@ export default function Home() {
           </div>
 
           <div className={styles.chatInputArea}>
-            <textarea
+            <div className={styles.inputWrapper}>
+              {mentionDropdownVisible && (() => {
+                const filtered = onlineUsers.filter(u =>
+                  u.toLowerCase().startsWith(mentionQuery.toLowerCase())
+                );
+                if (filtered.length === 0) return null;
+                return (
+                  <div className={styles.mentionDropdown}>
+                    <div className={styles.mentionDropdownHeader}>
+                      在线用户 · 按 ↑↓ 导航，Enter/Tab 确认，Esc 关闭
+                    </div>
+                    {filtered.map((user, idx) => (
+                      <div
+                        key={user}
+                        className={`${styles.mentionItem} ${idx === mentionActiveIndex ? styles.mentionItemActive : ''}`}
+                        onMouseDown={(e) => {
+                          // 用 mousedown 而非 click，防止 textarea blur 先触发
+                          e.preventDefault();
+                          selectMention(user);
+                        }}
+                      >
+                        <span className={styles.onlineUserDot} />
+                        {user}
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+              <textarea
+                ref={textareaRef}
               className={styles.chatInput}
               value={inputMessage}
-              onChange={(e) => setInputMessage(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSendMessage();
-                }
-              }}
-              placeholder="输入消息... (Enter 发送，Shift+Enter 换行)，支持代码块"
+              onChange={handleInputChange}
+              onKeyDown={handleKeyPress}
+              placeholder="输入消息... (Enter 发送，Shift+Enter 换行)，支持代码块，@ 提及用户"
               rows={2}
             />
+            </div>{/* end inputWrapper */}
             <div className={styles.buttonRow}>
               <button 
                 className={styles.codeBlockBtn} 
