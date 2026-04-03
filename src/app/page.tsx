@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { encryptToStorage, decryptFromStorage } from '@/utils/crypto';
 import styles from './page.module.css';
 
@@ -154,6 +154,26 @@ export default function Home() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  // 解密消息
+  const decryptMessage = useCallback(async (data: any) => {
+    try {
+      const { decrypt } = await import('@/utils/crypto');
+      const decryptedText = await decrypt(data.text, password);
+      const safeUsername = escapeHtml(data.username || '');
+      const isSelf = data.username === username;
+      setMessages(prev => [...prev, {
+        id: data.id || Date.now().toString(),
+        type: 'user',
+        username: isSelf ? safeUsername + ' (你)' : safeUsername,
+        text: decryptedText,
+        time: data.time || formatTime12Hour()
+      }]);
+    } catch {
+      // 如果解密失败，可能是其他频道的消息或格式问题
+      console.error('解密消息失败');
+    }
+  }, [password, username]);
+
   // WebSocket 连接
   useEffect(() => {
     if (!isLoggedIn) return;
@@ -245,27 +265,9 @@ export default function Home() {
       if (reconnectTimer) clearTimeout(reconnectTimer);
       if (ws) ws.close();
     };
-  }, [isLoggedIn, channel, username, password]);
+  }, [isLoggedIn, channel, username, password, decryptMessage]);
 
-  // 解密消息
-  const decryptMessage = async (data: any) => {
-    try {
-      const { decrypt } = await import('@/utils/crypto');
-      const decryptedText = await decrypt(data.text, password);
-      const safeUsername = escapeHtml(data.username || '');
-      const isSelf = data.username === username;
-      setMessages(prev => [...prev, {
-        id: data.id || Date.now().toString(),
-        type: 'user',
-        username: isSelf ? safeUsername + ' (你)' : safeUsername,
-        text: decryptedText,
-        time: data.time || formatTime12Hour()
-      }]);
-    } catch {
-      // 如果解密失败，可能是其他频道的消息或格式问题
-      console.error('解密消息失败');
-    }
-  };
+
 
   const addSystemMessage = (text: string) => {
     setMessages(prev => [...prev, {

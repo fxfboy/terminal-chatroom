@@ -1,0 +1,14 @@
+{
+  "telegram": {
+    "botToken": "8635775103:AAEb9vl3aRUl2kNzkJHy_mKlTDHxWhNusvM"
+  },
+  "access": {
+    "allowedUserIds": [6556478503]
+  },
+  "claude": {
+    "command": "claude"
+  },
+  "logging": {
+    "level": "info"
+  }
+}
