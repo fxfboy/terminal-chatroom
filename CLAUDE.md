@@ -15,15 +15,48 @@ Encrypted real-time terminal chatroom. Custom Node.js server runs both Next.js 1
 
 ## Architecture
 
-**Server (`server.js`):** Custom HTTP server that handles Next.js requests and upgrades `/ws` connections to WebSocket. Manages channels (Map of password, users, message history), broadcasts messages/user lists, and persists encrypted messages to SQLite. WebSocket message types: `join`, `message`, `leave`. Keepalive via 30s ping/pong.
+### Server (`server.js`)
 
-**Database (`db.js`):** SQLite via better-sqlite3. Single `messages` table indexed on `channel`. Auto-cleans to 200 messages per channel.
+Custom HTTP server that handles Next.js requests and upgrades `/ws` connections to WebSocket. Manages channels (`Map<channel, {password, users, messageHistory}>`), tracks users (`Map<ws, {channel, username, ip}>`), broadcasts messages/user lists, and persists encrypted messages to SQLite. Keepalive via 30s ping/pong.
 
-**Frontend (`src/app/page.tsx`):** Single-page client component. Handles login, session recovery (encrypted localStorage), WebSocket auto-reconnect (5s interval), message encryption/decryption, and rendering with code block detection + copy buttons.
+**WebSocket message types:** `join`, `message`, `leave`, `kick`, `ban` (last two are test-only).
 
-**Crypto (`src/utils/crypto.js`):** Web Crypto API wrapper — PBKDF2 key derivation (100k iterations, SHA-256) → AES-256-GCM. Also provides localStorage encryption helpers for session persistence.
+**Security & rate limiting:**
+- Input validation: max username 50 chars, channel 50 chars, password 100 chars, message 100KB
+- Character validation via regex (`[\w\u4e00-\u9fa5\-_.\s]+` for usernames, `[\w\u4e00-\u9fa5\-_]+` for channels)
+- Per-IP rate limits: 30 messages/min, 10 connections/min, 5 join attempts/min
+- IP banning: 30-minute ban duration, tracked in memory
+- Cleanup intervals: ban + rate limit cleanup every 60s
 
-**Styling (`src/app/globals.css`, `page.module.css`):** Dark terminal/CRT aesthetic with CSS variables. Responsive with 768px mobile breakpoint. CSS Modules for component scoping.
+**Channel behavior:** Auto-created on first join, deleted when last user leaves. Loads last 50 messages from DB on join. In-memory history capped at 200 messages per channel.
+
+### Database (`db.js`)
+
+SQLite via better-sqlite3. Single `messages` table (`id`, `channel`, `username`, `text`, `time`, `created_at`) indexed on `channel`. Exports `saveMessage()`, `getHistory(channel, limit=100)`, `cleanupOldMessages(channel, keepCount=200)`.
+
+### Frontend (`src/app/page.tsx`)
+
+Single-page client component (~664 lines). Key features:
+
+- **Login** — username/channel/password form
+- **Session recovery** — modal on return visit, decrypts saved session from localStorage
+- **Auto-lock** — locks screen after 5 minutes of inactivity (mousedown, mousemove, keypress, scroll, touchstart detection), requires password to unlock
+- **WebSocket** — auto-reconnect at 5s interval, connection state tracking (`connecting`/`connected`/`disconnected`/`error`), duplicate connection prevention, no reconnect after logout
+- **Messages** — client-side AES-256-GCM encryption/decryption, code block detection (``` fenced blocks) with copy buttons, HTML escaping for XSS prevention, 12-hour time format
+- **Input** — Enter to send, Shift+Enter for newline, code block insertion button
+- **Online users** — sidebar panel (hidden on mobile <768px)
+
+### Crypto (`src/utils/crypto.js`)
+
+Web Crypto API wrapper — PBKDF2 key derivation (100k iterations, SHA-256) → AES-256-GCM with random 16-byte salt + 12-byte IV per encryption. Exports `encrypt`, `decrypt`, `encryptToStorage`, `decryptFromStorage`.
+
+### Styling (`src/app/globals.css`, `page.module.css`)
+
+Dark terminal/CRT aesthetic with CSS variables. Background `#0f0f12`, accent colors purple (`#8b5cf6`) / indigo (`#6366f1`). Responsive with 768px mobile breakpoint. CSS Modules for component scoping.
+
+## Deployment
+
+Docker support via multi-stage `Dockerfile` (node:20-alpine) and `docker-compose.yml`. Exposes port 3000. SQLite data persisted via Docker volume (`chat-data:/app/data`). Health check on localhost:3000 every 30s. Configurable via env vars: `DB_PATH`, `NODE_ENV`, `PORT`.
 
 ## Key Conventions
 
@@ -33,3 +66,4 @@ Encrypted real-time terminal chatroom. Custom Node.js server runs both Next.js 1
 - `crypto.js` is plain JS (not TypeScript)
 - Server-side code (`server.js`, `db.js`) uses CommonJS (`require`)
 - No Tailwind — custom CSS with CSS Modules
+- Message IDs use `Date.now().toString()`

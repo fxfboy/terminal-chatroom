@@ -529,3 +529,80 @@
 .chatMessages::-webkit-scrollbar-thumb:hover {
   background: #475569;
 }
+
+/* ===== @提及功能样式 ===== */
+
+/* 输入区域的相对定位包装（用于定位下拉列表） */
+.inputWrapper {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 提及下拉列表 */
+.mentionDropdown {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  background: var(--input-bg);
+  border: 1px solid #8b5cf6;
+  box-shadow: 0 -4px 16px rgba(139, 92, 246, 0.2);
+  z-index: 100;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.mentionDropdownHeader {
+  padding: 6px 12px;
+  font-size: 11px;
+  color: #64748b;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-color);
+}
+
+/* 单个提及候选项 */
+.mentionItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 14px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-color);
+  transition: background 0.15s ease;
+}
+
+.mentionItem:hover,
+.mentionItemActive {
+  background: rgba(139, 92, 246, 0.15);
+  color: #a78bfa;
+}
+
+.mentionItem .onlineUserDot {
+  width: 7px;
+  height: 7px;
+  min-width: 7px;
+  background: #22c55e;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* 消息中的 @提及高亮（他人提及） */
+.mentionHighlight {
+  color: #a78bfa;
+  font-weight: 600;
+  background: rgba(139, 92, 246, 0.12);
+  padding: 0 3px;
+  border-radius: 3px;
+}
+
+/* 消息中提及到自己时的高亮（更突出） */
+.mentionSelf {
+  color: #f59e0b;
+  font-weight: 700;
+  background: rgba(245, 158, 11, 0.15);
+  padding: 0 3px;
+  border-radius: 3px;
+}
